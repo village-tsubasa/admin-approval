@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2c7a5c">
+<title>承認管理</title>
+<link rel="stylesheet" href="./css/common.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body {
+    padding-bottom: 110px; /* sticky アクションバー分の余白 */
+  }
+  /* ==========================================
+     ヘッダー（固定）
+     ========================================== */
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-sm);
+  }
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .header-icon {
+    font-size: 22px;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .refresh-btn,
+  .logout-btn {
+    min-height: var(--tap);
+    min-width: var(--tap);
+    padding: 0 12px;
+    background: rgba(255, 255, 255, .18);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .refresh-btn:active,
+  .logout-btn:active { background: rgba(255, 255, 255, .3); }
+
+  /* ==========================================
+     概要バー
+     ========================================== */
+  .summary-bar {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+  }
+  .summary-bar .count {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 17px;
+  }
+  .summary-bar .select-all-toggle {
+    min-height: var(--tap);
+    padding: 0 14px;
+    background: #fff;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ==========================================
+     リスト本体
+     ========================================== */
+  main {
+    padding: 12px 12px 8px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .group {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .group-header {
+    background: var(--primary-bg);
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #d0e2d6;
+  }
+  .group-header .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .group-header .name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .group-header .badge {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 999px;
+    font-size: 12px;
+    padding: 2px 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .group-header .group-select {
+    min-height: 36px;
+    padding: 0 12px;
+    background: #fff;
+    border: 1px solid var(--primary-light);
+    color: var(--primary);
+    border-radius: var(--radius);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .item-list {
+    padding: 8px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ==========================================
+     カード（個別申請）
+     ========================================== */
+  .item-card {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
+  }
+  .item-card:active { background: #fafafa; }
+  .item-card.selected {
+    border-color: var(--primary);
+    background: #f1f9f4;
+  }
+  .item-card.duplicate {
+    border-color: var(--warn);
+    background: var(--warn-bg);
+  }
+  .item-card.duplicate.selected {
+    background: #ffe9c8;
+  }
+
+  .item-check {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .item-check input[type=checkbox] {
+    width: 28px;
+    height: 28px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .item-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .item-top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .item-date {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .item-time {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-feature-settings: 'tnum';
+  }
+  .dup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--warn);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .item-task {
+    font-size: 14px;
+    color: var(--text);
+    margin: 2px 0 2px;
+    overflow-wrap: anywhere;
+  }
+  .item-summary {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    overflow-wrap: anywhere;
+  }
+  .item-meta {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .dup-note {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: #fff;
+    border-left: 3px solid var(--warn);
+    border-radius: 4px;
+    font-size: 12px;
+    color: #6b3a00;
+  }
+
+  /* ==========================================
+     空状態
+     ========================================== */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .empty .icon { font-size: 56px; margin-bottom: 12px; }
+  .empty .title { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .empty .sub { font-size: 13px; }
+
+  /* ==========================================
+     下部アクションバー（sticky）
+     ========================================== */
+  .action-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #fff;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, .06);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .selected-count {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .selected-count .n {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0 2px;
+  }
+  .action-bar button {
+    min-height: var(--tap);
+    padding: 0 14px;
+    border-radius: var(--radius);
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .approve-btn {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+  }
+  .reject-btn {
+    background: var(--danger);
+    color: #fff;
+  }
+  .action-bar button:disabled {
+    opacity: .4;
+  }
+
+  /* ==========================================
+     モーダル（確認ダイアログ）
+     ========================================== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 9500;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .15);
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0 0 10px;
+    color: var(--text);
+  }
+  .modal-body {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .modal-body .reason-input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 15px;
+    resize: vertical;
+    min-height: 80px;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .modal-actions button {
+    min-height: var(--tap);
+    padding: 0 18px;
+    border-radius: var(--radius);
+    font-weight: 700;
+    border: none;
+    font-size: 14px;
+  }
+  .modal-cancel {
+    background: #f0f0f0;
+    color: var(--text);
+  }
+  .modal-confirm {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+  }
+  .modal-confirm.danger {
+    background: var(--danger);
+  }
+
+  /* デスクトップ（中央寄せモーダル） */
+  @media (min-width: 600px) {
+    .modal-backdrop { align-items: center; }
+    .modal { border-radius: var(--radius-lg); margin: 0 16px; }
+  }
+
+  /* ==========================================
+     スケルトン
+     ========================================== */
+  .skeleton-group {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .skeleton-line {
+    height: 12px;
+    background: linear-gradient(90deg, #eee, #f7f7f7, #eee);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    margin: 8px 0;
+    animation: shimmer 1.4s linear infinite;
+  }
+  .skeleton-line.short { width: 40%; }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+</style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-title">
+      <span class="header-icon">🛡️</span>
+      <span>承認管理</span>
+    </div>
+    <div class="header-actions">
+      <button class="refresh-btn" id="refreshBtn" type="button" aria-label="再読み込み">🔄 更新</button>
+      <button class="logout-btn" id="logoutBtn" type="button">ログアウト</button>
+    </div>
+  </header>
+
+  <div class="summary-bar">
+    <div>承認待ち <span class="count" id="totalCount">—</span> 件</div>
+    <button class="select-all-toggle" id="selectAllToggle" type="button">⬜ 全選択</button>
+  </div>
+
+  <main id="main">
+    <!-- スケルトン（初期ロード時） -->
+    <div id="skeleton">
+      <div class="skeleton-group">
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+      </div>
+      <div class="skeleton-group">
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line"></div>
+      </div>
+    </div>
+
+    <!-- 一覧（描画ターゲット） -->
+    <div id="list" hidden></div>
+
+    <!-- 空状態 -->
+    <div id="empty" class="empty" hidden>
+      <div class="icon">✅</div>
+      <div class="title">承認待ちはありません</div>
+      <div class="sub">利用者からの新しい申請が届くと、ここに表示されます</div>
+    </div>
+  </main>
+
+  <div class="action-bar">
+    <div class="selected-count"><span class="n" id="selCount">0</span>件選択中</div>
+    <button class="reject-btn" id="rejectBtn" disabled type="button">❌ 選択却下</button>
+    <button class="approve-btn" id="approveBtn" disabled type="button">✅ 選択承認</button>
+  </div>
+
+  <!-- 確認モーダル -->
+  <div class="modal-backdrop" id="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 class="modal-title" id="modalTitle">確認</h2>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="modalCancel" type="button">キャンセル</button>
+        <button class="modal-confirm" id="modalConfirm" type="button">実行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ローディング -->
+  <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+
+<script type="module">
+// ==========================================
+// 承認管理画面 メインスクリプト
+// ==========================================
+import { requireAuthOrRedirect, isAuthenticated, clearAuth } from './lib/auth.js';
+import { fetchPendingItems, detectDuplicates, approveItems, rejectItems } from './lib/approval-api.js';
+import { toast, humanizeError, showLoading } from './lib/ui-utils.js';
+
+if (!requireAuthOrRedirect('./index.html')) {
+  // リダイレクト中なので以降の初期化は走らない
+}
+
+// ----- アプリ状態 ------
+const state = {
+  /** @type {Array<object>} */
+  items: [],
+  /** @type {Map<string, Array<object>>} */
+  duplicates: new Map(),
+  /** @type {Set<string>} */
+  selected: new Set(),
+  /** ミューテーション処理中フラグ（多重送信防止） */
+  busy: false
+};
+// 互換ショートカット
+const selected = state.selected;
+
+// ----- ヘルパー ------
+function fmtDate(d) {
+  // 'YYYY-MM-DD' → 'M/D(曜)'
+  const [y, m, day] = d.split('-').map(Number);
+  const dt = new Date(y, m - 1, day);
+  const w = ['日','月','火','水','木','金','土'][dt.getDay()];
+  return `${m}/${day}(${w})`;
+}
+function fmtTime(t) {
+  if (!t) return '';
+  return t.slice(0, 5); // 'HH:MM:SS' → 'HH:MM'
+}
+function fmtCreatedAt(iso) {
+  const dt = new Date(iso);
+  const m = dt.getMonth() + 1, d = dt.getDate();
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mm = String(dt.getMinutes()).padStart(2, '0');
+  return `${m}/${d} ${hh}:${mm}`;
+}
+
+function groupByClient(items) {
+  // 申請日昇順でグループ内ソート、グループ自体は「最古の申請」で並べる
+  const map = new Map();
+  for (const it of items) {
+    if (!map.has(it.client)) map.set(it.client, []);
+    map.get(it.client).push(it);
+  }
+  for (const arr of map.values()) {
+    arr.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+  return [...map.entries()].sort((a, b) =>
+    a[1][0].created_at.localeCompare(b[1][0].created_at)
+  );
+}
+
+// ----- データロード ------
+async function loadItems() {
+  // セッション切れチェック
+  if (!isAuthenticated()) {
+    location.replace('./index.html');
+    return;
+  }
+
+  const skel = document.getElementById('skeleton');
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+
+  // 再ロード時もスケルトンを出す
+  skel.hidden = false;
+  listEl.hidden = true;
+  emptyEl.hidden = true;
+
+  try {
+    const items = await fetchPendingItems();
+    let dups = new Map();
+    try {
+      dups = await detectDuplicates(items);
+    } catch (ex) {
+      // 重複検出はベストエフォート扱い。失敗しても本体は表示する。
+      console.warn('detectDuplicates 失敗（重複警告なしで続行）:', ex);
+      toast('重複検出に失敗しました（一覧は表示できます）', 'warn');
+    }
+    state.items = items;
+    state.duplicates = dups;
+    // 選択状態は再ロードで失効しているのでクリア
+    state.selected.clear();
+    render();
+  } catch (ex) {
+    console.error(ex);
+    skel.hidden = true;
+    toast(humanizeError(ex), 'error', 4500);
+    // エラー時は空状態風に表示（再ロード可）
+    state.items = [];
+    state.duplicates = new Map();
+    state.selected.clear();
+    render();
+  }
+}
+
+// ----- 描画 ------
+function render() {
+  const items = state.items;
+  document.getElementById('skeleton').hidden = true;
+  document.getElementById('totalCount').textContent = items.length;
+
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+
+  if (items.length === 0) {
+    listEl.hidden = true;
+    emptyEl.hidden = false;
+    updateActionState();
+    return;
+  }
+  emptyEl.hidden = true;
+  listEl.hidden = false;
+  listEl.innerHTML = '';
+
+  for (const [client, arr] of groupByClient(items)) {
+    const group = document.createElement('section');
+    group.className = 'group';
+    group.dataset.client = client;
+
+    const header = document.createElement('div');
+    header.className = 'group-header';
+    header.innerHTML = `
+      <div class="left">
+        <span class="name">${escapeHtml(client)}</span>
+        <span class="badge">${arr.length}件</span>
+      </div>
+      <button class="group-select" type="button">グループ全選択</button>
+    `;
+    header.querySelector('.group-select').addEventListener('click', () => {
+      const ids = arr.map(x => x.id);
+      const allSelected = ids.every(id => selected.has(id));
+      if (allSelected) ids.forEach(id => selected.delete(id));
+      else ids.forEach(id => selected.add(id));
+      render();
+    });
+
+    const list = document.createElement('div');
+    list.className = 'item-list';
+
+    for (const it of arr) {
+      const isDup = state.duplicates.has(it.id);
+      const dupMatches = isDup ? state.duplicates.get(it.id) : null;
+
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      if (selected.has(it.id)) card.classList.add('selected');
+      if (isDup) card.classList.add('duplicate');
+      card.dataset.id = it.id;
+
+      const timeStr = fmtTime(it.start_time) + (it.end_time ? `〜${fmtTime(it.end_time)}` : '〜未定');
+      const dupNote = isDup
+        ? `<div class="dup-note">同日に承認済みの予定が ${dupMatches.length} 件あります。重複していないか確認してください。</div>`
+        : '';
+      card.innerHTML = `
+        <label class="item-check" onclick="event.stopPropagation()">
+          <input type="checkbox" ${selected.has(it.id) ? 'checked' : ''} aria-label="この申請を選択">
+        </label>
+        <div class="item-body">
+          <div class="item-top">
+            <span class="item-date">${fmtDate(it.date)}</span>
+            <span class="item-time">${timeStr}</span>
+            ${isDup ? '<span class="dup-badge">⚠️ 重複あり</span>' : ''}
+          </div>
+          <div class="item-task">${escapeHtml(it.task || '')}</div>
+          ${it.summary ? `<div class="item-summary">${escapeHtml(it.summary)}</div>` : ''}
+          <div class="item-meta">申請: ${fmtCreatedAt(it.created_at)}</div>
+          ${dupNote}
+        </div>
+      `;
+
+      const cb = card.querySelector('input[type=checkbox]');
+      cb.addEventListener('change', (e) => {
+        if (e.target.checked) selected.add(it.id);
+        else selected.delete(it.id);
+        card.classList.toggle('selected', e.target.checked);
+        updateActionState();
+      });
+      // カード全体タップでもチェック切り替え
+      card.addEventListener('click', () => {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+
+      list.appendChild(card);
+    }
+
+    group.appendChild(header);
+    group.appendChild(list);
+    listEl.appendChild(group);
+  }
+
+  updateActionState();
+}
+
+function updateActionState() {
+  const n = selected.size;
+  document.getElementById('selCount').textContent = n;
+  document.getElementById('approveBtn').disabled = n === 0 || state.busy;
+  document.getElementById('rejectBtn').disabled = n === 0 || state.busy;
+
+  const total = state.items.length;
+  const allSelected = total > 0 && n === total;
+  document.getElementById('selectAllToggle').textContent = allSelected ? '☑ 全解除' : '⬜ 全選択';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ----- イベント ------
+document.getElementById('selectAllToggle').addEventListener('click', () => {
+  const total = state.items.length;
+  if (total === 0) return;
+  if (selected.size === total) selected.clear();
+  else state.items.forEach(it => selected.add(it.id));
+  render();
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  clearAuth();
+  location.replace('./index.html');
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  if (state.busy) return;
+  loadItems();
+});
+
+/**
+ * 承認実行（多重送信防止・ボタン状態管理付き）
+ */
+async function doApprove(targetIds) {
+  if (!isAuthenticated()) {
+    toast('セッションが切れました。再ログインしてください。', 'error');
+    setTimeout(() => location.replace('./index.html'), 1200);
+    return;
+  }
+  const approveBtn = document.getElementById('approveBtn');
+  const rejectBtn = document.getElementById('rejectBtn');
+  const originalApproveText = approveBtn.textContent;
+
+  state.busy = true;
+  approveBtn.disabled = true;
+  rejectBtn.disabled = true;
+  approveBtn.textContent = '処理中…';
+  showLoading(true);
+
+  try {
+    const result = await approveItems(targetIds);
+    if (result.gasFailed === 0) {
+      toast(`${result.approved}件を承認しました`, 'ok');
+    } else {
+      toast(
+        `${result.approved}件を承認しました（うち ${result.gasFailed} 件はスプレッドシート同期に失敗、自動再送に委ねます）`,
+        'warn', 4500
+      );
+    }
+    await loadItems();
+  } catch (ex) {
+    console.error(ex);
+    toast(humanizeError(ex), 'error', 4500);
+  } finally {
+    state.busy = false;
+    showLoading(false);
+    approveBtn.textContent = originalApproveText;
+    updateActionState();
+  }
+}
+
+/**
+ * 却下実行（多重送信防止・ボタン状態管理付き）
+ */
+async function doReject(targetIds, reason) {
+  if (!isAuthenticated()) {
+    toast('セッションが切れました。再ログインしてください。', 'error');
+    setTimeout(() => location.replace('./index.html'), 1200);
+    return;
+  }
+  const approveBtn = document.getElementById('approveBtn');
+  const rejectBtn = document.getElementById('rejectBtn');
+  const originalRejectText = rejectBtn.textContent;
+
+  state.busy = true;
+  approveBtn.disabled = true;
+  rejectBtn.disabled = true;
+  rejectBtn.textContent = '処理中…';
+  showLoading(true);
+
+  try {
+    const result = await rejectItems(targetIds, reason);
+    toast(`${result.rejected}件を却下しました`, 'warn');
+    await loadItems();
+  } catch (ex) {
+    console.error(ex);
+    toast(humanizeError(ex), 'error', 4500);
+  } finally {
+    state.busy = false;
+    showLoading(false);
+    rejectBtn.textContent = originalRejectText;
+    updateActionState();
+  }
+}
+
+// 承認ボタン → 確認モーダル → API
+document.getElementById('approveBtn').addEventListener('click', () => {
+  if (state.busy || selected.size === 0) return;
+  const targetIds = [...selected];
+  openConfirm({
+    title: `${targetIds.length}件を承認しますか？`,
+    body: '選択した申請を承認し、スプレッドシートに同期します。',
+    confirmLabel: '承認する',
+    danger: false,
+    onConfirm: () => doApprove(targetIds)
+  });
+});
+
+// 却下ボタン → 確認モーダル（理由入力付き）→ API
+document.getElementById('rejectBtn').addEventListener('click', () => {
+  if (state.busy || selected.size === 0) return;
+  const targetIds = [...selected];
+  openConfirm({
+    title: `${targetIds.length}件を却下しますか？`,
+    body: '却下の理由を入力できます（任意・記録のみ）。',
+    withReason: true,
+    confirmLabel: '却下する',
+    danger: true,
+    onConfirm: (reason) => doReject(targetIds, reason || '')
+  });
+});
+
+// ----- モーダル ------
+function openConfirm({ title, body, confirmLabel, danger, withReason, onConfirm }) {
+  const modal = document.getElementById('modal');
+  document.getElementById('modalTitle').textContent = title;
+  const bodyEl = document.getElementById('modalBody');
+  bodyEl.innerHTML = escapeHtml(body) + (withReason
+    ? '<textarea class="reason-input" id="reasonInput" placeholder="却下理由（任意）"></textarea>'
+    : '');
+  const confirm = document.getElementById('modalConfirm');
+  confirm.textContent = confirmLabel || '実行';
+  confirm.classList.toggle('danger', !!danger);
+
+  const close = () => modal.classList.remove('show');
+  const cancelBtn = document.getElementById('modalCancel');
+
+  // 既存リスナー削除のため、置換
+  const newConfirm = confirm.cloneNode(true);
+  confirm.parentNode.replaceChild(newConfirm, confirm);
+  const newCancel = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+  newConfirm.addEventListener('click', () => {
+    const reason = withReason ? (document.getElementById('reasonInput')?.value || '') : null;
+    close();
+    onConfirm(reason);
+  });
+  newCancel.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); }, { once: true });
+
+  modal.classList.add('show');
+}
+
+// 初期ロード（Supabase から承認待ち一覧を取得）
+loadItems();
+</script>
+</body>
+</html>
